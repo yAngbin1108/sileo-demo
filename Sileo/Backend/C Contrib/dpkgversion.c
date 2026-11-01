@@ -6,6 +6,7 @@
 //  Copyright © 2022 Sileo Team. All rights reserved.
 //
 
+#include <string.h>
 #include "dpkgversion.h"
 
 int order(char ch) {
@@ -19,10 +20,16 @@ int order(char ch) {
     return 0;
 }
 
+static int allowedChar(char character) {
+    /* memchr instead of strrchr: clang lowers strrchr("const", c) into memrchr(),
+       which Apple's libSystem does not provide. */
+    return memchr(".-+~:", character, 5) != NULL || character == '\0';
+}
+
 int validate(char *string, int *length) {
     for (int i = 0; i < *length; i++) {
         char character = string[i];
-        if (!(isdigit(character) || isalpha(character) || strrchr(".-+~:", character))) {
+        if (!(isdigit(character) || isalpha(character) || allowedChar(character))) {
             return 1;
         }
     }
