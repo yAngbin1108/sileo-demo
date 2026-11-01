@@ -34,6 +34,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
             DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" \
             ONLY_ACTIVE_ARCH=NO ENABLE_TESTABILITY=NO \
+            PRODUCT_NAME=Sileo \
+            OTHER_LDFLAGS="-flto -Wl,-weak-l,lzma" \
             IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             build 2>&1 | tee build.log
 
