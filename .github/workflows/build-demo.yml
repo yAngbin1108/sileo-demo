@@ -27,7 +27,7 @@ jobs:
           xcodebuild -project Sileo.xcodeproj \
             -scheme "Sileo Demo" \
             -configuration Release \
-            -sdk iphoneos -arch arm64 \
+            -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -derivedDataPath dd \
             -clonedSourcePackagesDirPath spm \
