@@ -34,8 +34,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
             DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" \
             ONLY_ACTIVE_ARCH=NO ENABLE_TESTABILITY=NO \
-            PRODUCT_NAME=Sileo \
-            OTHER_LDFLAGS="-flto -Wl,-weak-l,lzma" \
             IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             build 2>&1 | tee build.log
 
@@ -43,20 +41,46 @@ jobs:
         if: failure()
         run: grep -E "error:|fatal error|The following build commands failed" build.log | sort -u | head -60
 
-      - name: Package IPA
+      - name: Package IPA (rename to Sileo, weak-link liblzma)
         run: |
           APP=$(find dd/Build/Products -maxdepth 2 -type d -name "*.app" | head -1)
           echo "APP=$APP"
           test -d "$APP"
           rm -rf Payload && mkdir Payload
-          cp -R "$APP" "Payload/"
-          NAME=$(basename "$APP")
-          echo "== bundle =="; ls -la "Payload/$NAME"
-          echo "== frameworks =="; ls -la "Payload/$NAME/Frameworks" 2>/dev/null || echo "(none)"
-          ( cd Payload && zip -qry ../"$NAME".ipa "$NAME" )
-          ls -la *.ipa
+          cp -R "$APP" "Payload/Sileo.app"
+          cd Payload/Sileo.app
+          mv "$(basename "$APP" .app)" Sileo
+          python3 - <<'EOF'
+          import struct, plistlib
+          p = 'Sileo'
+          d = bytearray(open(p, 'rb').read())
+          ncmds = struct.unpack('<I', d[16:20])[0]
+          o, patched = 32, []
+          for _ in range(ncmds):
+              cmd, sz = struct.unpack('<II', d[o:o+8])
+              if cmd == 0xc and sz < 200:
+                  noff = struct.unpack('<I', d[o+8:o+12])[0]
+                  s = bytes(d[o+noff:o+sz]).split(b'\0')[0].decode(errors='replace')
+                  if 'lzma' in s:            # not present on stock iOS -> weak link
+                      struct.pack_into('<I', d, o, 0x8000001c)
+                      patched.append(s)
+              o += sz
+          open(p, 'wb').write(d)
+          print('weak-linked:', patched)
+          pl = plistlib.load(open('Info.plist', 'rb'))
+          pl['CFBundleExecutable'] = 'Sileo'
+          pl['CFBundleDisplayName'] = 'Sileo'
+          pl['CFBundleName'] = 'Sileo'
+          for t in pl.get('CFBundleURLTypes', []):
+              if t.get('CFBundleURLName') == 'Sileo Demo':
+                  t['CFBundleURLName'] = 'Sileo'
+          plistlib.dump(pl, open('Info.plist', 'wb'), fmt=plistlib.FMT_BINARY)
+          EOF
+          cd ../..
+          ( cd Payload && zip -qry ../Sileo.ipa Sileo.app )
+          ls -la Sileo.ipa
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Sileo-Demo-ipa
-          path: "*.ipa"
+          name: Sileo-ipa
+          path: "Sileo.ipa"
