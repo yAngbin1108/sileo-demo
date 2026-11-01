@@ -1,0 +1,59 @@
+name: Build Sileo Demo IPA
+on:
+  workflow_dispatch:
+    inputs:
+      xcode:
+        description: Xcode version folder
+        required: false
+        default: Xcode_15.4.app
+jobs:
+  demo:
+    name: Sileo Demo (iphoneos, unsigned)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/${{ inputs.xcode }}
+
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Sileo.xcodeproj -scheme "Sileo Demo" -clonedSourcePackagesDirPath spm
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -project Sileo.xcodeproj \
+            -scheme "Sileo Demo" \
+            -configuration Release \
+            -sdk iphoneos -arch arm64 \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath dd \
+            -clonedSourcePackagesDirPath spm \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" \
+            ONLY_ACTIVE_ARCH=NO ENABLE_TESTABILITY=NO \
+            build 2>&1 | tee build.log
+
+      - name: Show errors only
+        if: failure()
+        run: grep -E "error:|fatal error|The following build commands failed" build.log | sort -u | head -60
+
+      - name: Package IPA
+        run: |
+          APP=$(find dd/Build/Products -maxdepth 2 -type d -name "*.app" | head -1)
+          echo "APP=$APP"
+          test -d "$APP"
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" "Payload/"
+          NAME=$(basename "$APP")
+          echo "== bundle =="; ls -la "Payload/$NAME"
+          echo "== frameworks =="; ls -la "Payload/$NAME/Frameworks" 2>/dev/null || echo "(none)"
+          ( cd Payload && zip -qry ../"$NAME".ipa "$NAME" )
+          ls -la *.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sileo-Demo-ipa
+          path: "*.ipa"
